@@ -1,15 +1,22 @@
 # vLLM Benchmarking Harness — Build Plan
 
-Status: proposed, not started. No implementation code has been written yet.
+Status: Phase 0 complete (2026-07-01). Phase 1 (Benchmark Harness) is next.
 
-## Phase 0 — Deploy
+## Phase 0 — Deploy ✅ done
 
-- Provision a rented GPU (Lambda Labs or RunPod).
+- Provision a rented GPU (Lambda Labs or RunPod). → RunPod RTX A5000.
 - Install vLLM, deploy Llama-3.2-3B in fp16.
 - For AWQ/GPTQ variants: **check HuggingFace Hub first** for existing
   pre-quantized Llama-3.2-3B checkpoints. Only write model-quantization
   scripts (in `models/`) if no usable pre-quantized version exists.
+  → Usable checkpoints found for both; no conversion scripts needed.
 - Confirm the OpenAI-compatible endpoint responds to a basic request.
+
+All three configurations (fp16, AWQ, GPTQ) deployed and verified via
+`/v1/chat/completions`. Several environment issues came up and were fixed
+along the way (CUDA/driver pin, transformers pin, context-length cap, GPTQ
+dtype) — see `context.md` for details and `CLAUDE.md` Project Quirks for the
+durable reference.
 
 ## Phase 1 — Benchmark Harness
 

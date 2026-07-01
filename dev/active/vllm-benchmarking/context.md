@@ -52,14 +52,11 @@ things stand and why.
 
 ## Environment Details
 
-> (none yet — actual GPU instance details once provisioned; mirror the
-> summary into root `CLAUDE.md` Environment/GPU Details section too)
+See root `CLAUDE.md` → Environment / GPU Details for the current pod id,
+GPU/driver specs, SSH access, and exposed ports (kept there, not duplicated
+here, so there's one source of truth to keep in sync).
 
 ## Open Questions
 
-- Does `ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3` load
-  cleanly in vLLM, or is the `shuyuej` GPTQ repo a better fit? Verify during
-  Phase 0 deploy.
-- GPU provider/instance choice (Lambda Labs vs RunPod), exact instance type —
-  pending user decision, see plan.md Phase 0.
-- Exact concurrency levels to sweep, report format — not yet decided.
+- Exact concurrency levels to sweep, report format — not yet decided
+  (Phase 1).
