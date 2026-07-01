@@ -1,4 +1,15 @@
-vllm
+# Pinned to CUDA 12.4 because the RunPod A5000 host in use has driver
+# 550.127.05 (max CUDA 12.4). vllm==0.8.5 is the latest release still
+# pinned to torch==2.6.0, the newest torch with a cu124 build. Plain
+# `pip install vllm` pulls torch 2.11.0 (cu13x-only) and fails at
+# runtime with "NVIDIA driver on your system is too old".
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+vllm==0.8.5
+# vllm==0.8.5 only pins transformers>=4.51.1 (no upper bound), so plain
+# `pip install` grabs the latest transformers, whose newer tokenizer
+# backend API vllm 0.8.5 doesn't know about (AttributeError:
+# TokenizersBackend has no attribute all_special_tokens_extended).
+# Pin to the minor version contemporary with vllm 0.8.5.
+transformers>=4.51.1,<4.52.0
 huggingface_hub
-transformers
-torch

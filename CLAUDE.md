@@ -28,23 +28,45 @@ the start of a session, especially after a context reset.
 
 ## Environment / GPU Details
 
-> TBD — filled in once a GPU is provisioned.
-
-- Provider: `TBD` (Lambda Labs / RunPod)
-- Instance type / GPU model: `TBD`
-- CUDA / driver version: `TBD`
-- vLLM version: `TBD`
-- SSH / connection notes: `TBD`
-- Exposed ports (serving endpoint, Prometheus, Grafana): `TBD`
+- Provider: RunPod (on-demand, secure cloud)
+- Instance type / GPU model: 1x RTX A5000, 24GB VRAM, $0.27/hr
+- Pod id: `gp5vv3dchw1t2a` (name `vllm-benchmark`) — check it's still running
+  with `runpodctl pod get gp5vv3dchw1t2a` before assuming it exists;
+  terminate with `runpodctl pod terminate gp5vv3dchw1t2a` when done to stop
+  billing
+- Driver / CUDA: NVIDIA driver 550.127.05, max CUDA 12.4 (see Quirks below)
+- vLLM version: 0.8.5 (pinned, see `requirements.txt`)
+- SSH: `ssh -i ~/.runpod/ssh/runpodctl-ssh-key root@<pod-ip> -p <pod-ssh-port>`
+  — get current ip/port via `runpodctl pod get gp5vv3dchw1t2a -o json`
+  (they can change if the pod restarts)
+- Repo lives on the pod at `/workspace/vllm-benchmarking-harness/` (synced via
+  rsync, not git-cloned)
+- Exposed ports: 22/tcp (SSH), 8000/http (vLLM OpenAI-compatible endpoint).
+  Prometheus/Grafana ports: `TBD` (Phase 3)
 
 ## Project Quirks
 
-> TBD — filled in as gotchas are discovered. Examples of the kind of thing
-> that belongs here: vLLM/quantization library version pinning issues,
-> AWQ vs GPTQ kernel support differences, thermal throttling behavior on
-> rented GPUs, endpoint auth quirks.
-
-- (none yet)
+- **Driver/CUDA mismatch on this RunPod host**: the host's NVIDIA driver
+  (550.127.05) only supports up to CUDA 12.4, but a plain `pip install vllm`
+  pulls the latest vllm (0.24.0 at time of writing) which requires
+  torch==2.11.0, a torch build with no CUDA 12.4 wheel — it fails at
+  `vllm serve` runtime with "NVIDIA driver on your system is too old", not at
+  install time. Fixed by pinning `vllm==0.8.5` (requires `torch==2.6.0`, the
+  newest torch still published for cu124) with
+  `--extra-index-url https://download.pytorch.org/whl/cu124` in
+  `requirements.txt`. If re-provisioning on a different host, check
+  `nvidia-smi`'s reported CUDA Version first — a newer-driver host may not
+  need this pin.
+- Llama-3.2-3B-Instruct (fp16) is a gated HF repo — needs `HF_TOKEN` env var
+  set on the pod (license must be accepted on huggingface.co first). The
+  AWQ/GPTQ community re-uploads used in this project are not gated.
+- Llama-3.2-3B-Instruct's default max seq len (131072) needs more KV-cache
+  memory than fits on this 24GB card — `serving/launch_vllm.sh` caps
+  `--max-model-len` to 8192 by default (override via `MAX_MODEL_LEN`).
+- The GPTQ checkpoint (`ModelCloud/...gptqmodel-4bit-vortex-v3`) needs
+  `--dtype float16` — this vllm version's GPTQ kernel doesn't support
+  bfloat16. `serving/launch_vllm.sh` sets this automatically whenever
+  `quantization=gptq` (override via `DTYPE`).
 
 ## Active Work
 
