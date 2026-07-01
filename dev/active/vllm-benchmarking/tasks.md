@@ -9,12 +9,14 @@ sync with `plan.md`).
 - [ ] Provision rented GPU (Lambda Labs or RunPod)
 - [ ] Install vLLM
 - [ ] Deploy Llama-3.2-3B fp16, confirm it loads
-- [ ] Check HuggingFace Hub for existing pre-quantized Llama-3.2-3B
-      checkpoints (AWQ and GPTQ) before writing any conversion scripts
-- [ ] If no usable pre-quantized checkpoint exists: write quantization
-      scripts in `models/`
-- [ ] Deploy AWQ variant
-- [ ] Deploy GPTQ variant
+- [x] Check HuggingFace Hub for existing pre-quantized Llama-3.2-3B
+      checkpoints (AWQ and GPTQ) before writing any conversion scripts —
+      done 2026-07-01, usable checkpoints found (see context.md), no
+      conversion scripts needed
+- [ ] Deploy AWQ variant (`casperhansen/llama-3.2-3b-instruct-awq`)
+- [ ] Deploy GPTQ variant (`ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3`,
+      fall back to `shuyuej/Llama-3.2-3B-Instruct-GPTQ` if it doesn't load
+      cleanly in vLLM)
 - [ ] Confirm OpenAI-compatible endpoint responds to a basic request
 
 ## Phase 1 — Benchmark Harness

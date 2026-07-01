@@ -1,0 +1,4 @@
+vllm
+huggingface_hub
+transformers
+torch

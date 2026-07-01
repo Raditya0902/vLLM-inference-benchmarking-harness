@@ -15,14 +15,16 @@ the start of a session, especially after a context reset.
 
 ## Key Commands
 
-> TBD — filled in as each phase lands real scripts.
-
-- Start vLLM server: `TBD`
-- Run baseline (HF) inference: `TBD`
-- Run benchmark suite: `TBD`
-- Run smoke test (single small request, before a full benchmark run): `TBD`
-- Start Prometheus/Grafana stack: `TBD`
-- Generate report: `TBD`
+- One-time env setup on a fresh GPU box: `./scripts/setup_env.sh`
+- Start vLLM server: `./serving/launch_vllm.sh <model-repo> [awq|gptq] [port]`
+  - fp16: `./serving/launch_vllm.sh meta-llama/Llama-3.2-3B-Instruct`
+  - AWQ: `./serving/launch_vllm.sh casperhansen/llama-3.2-3b-instruct-awq awq`
+  - GPTQ: `./serving/launch_vllm.sh ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3 gptq`
+- Run baseline (HF) inference: `TBD` (Phase 2)
+- Run benchmark suite: `TBD` (Phase 1)
+- Run smoke test (single small request, before a full benchmark run): `TBD` (Phase 1)
+- Start Prometheus/Grafana stack: `TBD` (Phase 3)
+- Generate report: `TBD` (Phase 4)
 
 ## Environment / GPU Details
 
