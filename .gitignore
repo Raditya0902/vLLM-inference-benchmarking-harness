@@ -1,0 +1,22 @@
+# Model weights (never commit these)
+models/**/*.bin
+models/**/*.safetensors
+models/**/*.gguf
+*.pt
+
+# Benchmark output (raw data, regenerable)
+results/*
+!results/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Env / secrets
+.env
+*.pem
+
+# OS cruft
+.DS_Store
