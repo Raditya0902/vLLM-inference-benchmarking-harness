@@ -24,3 +24,7 @@ venv/
 
 # OS cruft
 .DS_Store
+
+# Internal dev notes / instructions - not needed in the public repo
+CLAUDE.md
+dev/active/
