@@ -36,6 +36,7 @@ initially measured as the slowest config; corrected, it's the fastest).
 
 ## Repo layout
 
+- `scripts/` — one-time environment setup and dataset download
 - `serving/` — vLLM server launch script
 - `baseline/` — naive HF `transformers.generate()` server (`launch_baseline.sh`
   execs `hf_inference_server.py`), same OpenAI API contract as vLLM
