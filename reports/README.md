@@ -125,6 +125,15 @@ is a real tradeoff, not a vLLM weakness: `gpu_memory_utilization=0.9`
 (vLLM's default) trades memory headroom for the ability to serve many
 concurrent requests without re-allocating KV cache mid-run.
 
+### Observability
+
+![Grafana dashboard live during a benchmark run](images/grafana_dashboard.gif)
+
+The Prometheus/Grafana stack (see Methodology) running live against the
+AWQ config during a benchmark sweep — GPU utilization, power draw, token
+throughput, and requests running/waiting all visibly respond to the
+traffic burst.
+
 ### Continuous vs. static batching (AWQ, addendum)
 
 ![Continuous vs. static-like batching](images/batching_comparison.png)
