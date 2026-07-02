@@ -1,0 +1,109 @@
+{
+  "title": "vLLM Benchmark — Live Monitoring",
+  "uid": "vllm-benchmark",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Time to First Token (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(vllm:time_to_first_token_seconds_bucket[1m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:time_to_first_token_seconds_bucket[1m])) by (le))", "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Time per Output Token (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(vllm:time_per_output_token_seconds_bucket[1m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:time_per_output_token_seconds_bucket[1m])) by (le))", "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "End-to-End Request Latency (p50 / p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(vllm:e2e_request_latency_seconds_bucket[1m])) by (le))", "legendFormat": "p50" },
+        { "expr": "histogram_quantile(0.95, sum(rate(vllm:e2e_request_latency_seconds_bucket[1m])) by (le))", "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Requests Running / Waiting",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        { "expr": "vllm:num_requests_running", "legendFormat": "running" },
+        { "expr": "vllm:num_requests_waiting", "legendFormat": "waiting" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Token Throughput",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(vllm:generation_tokens_total[1m]))", "legendFormat": "output tok/s" },
+        { "expr": "sum(rate(vllm:prompt_tokens_total[1m]))", "legendFormat": "prompt tok/s" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "GPU KV-Cache Usage",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "vllm:gpu_cache_usage_perc", "legendFormat": "KV-cache usage" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "GPU Utilization",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "nvidia_smi_utilization_gpu_ratio", "legendFormat": "GPU util" },
+        { "expr": "nvidia_smi_utilization_memory_ratio", "legendFormat": "mem bandwidth util" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "GPU Memory Used / Total",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] },
+      "targets": [
+        { "expr": "nvidia_smi_memory_used_bytes", "legendFormat": "used" },
+        { "expr": "nvidia_smi_memory_total_bytes", "legendFormat": "total" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "GPU Power Draw / Temperature",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 },
+      "fieldConfig": { "defaults": { "unit": "watt" }, "overrides": [] },
+      "targets": [
+        { "expr": "nvidia_smi_power_draw_watts", "legendFormat": "power (W)" },
+        { "expr": "nvidia_smi_temperature_gpu", "legendFormat": "temp (C)" }
+      ]
+    }
+  ]
+}

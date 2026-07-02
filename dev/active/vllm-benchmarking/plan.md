@@ -1,7 +1,7 @@
 # vLLM Benchmarking Harness — Build Plan
 
-Status: Phase 0, Phase 1, and Phase 2 complete (2026-07-02). Phase 3 (Cost &
-Observability) is next.
+Status: Phase 0, Phase 1, Phase 2, and Phase 3 complete (2026-07-02).
+Phase 4 (Report) is next.
 
 ## Phase 0 — Deploy ✅ done
 
@@ -50,13 +50,23 @@ concurrency=1 (kernel efficiency alone), and 22.6-45.5x higher throughput
 at concurrency=32 (kernel efficiency + continuous batching combined); the
 naive baseline uses ~3.1-3.3x less peak GPU memory throughout.
 
-## Phase 3 — Cost & Observability
+## Phase 3 — Cost & Observability ✅ done
 
-- Set up Prometheus scraping vLLM's metrics endpoint + a GPU exporter
-  (e.g. DCGM or nvidia-smi exporter).
-- Build Grafana dashboards for live monitoring during benchmark runs.
-- Build a cost model: $/1M tokens, from GPU rental rate ÷ measured
-  throughput, for each configuration (fp16 vLLM, AWQ, GPTQ, HF baseline).
+Set up Prometheus (scraping vLLM's native `/metrics` + `nvidia_gpu_exporter`,
+chosen over DCGM for simplicity — single static binary, no separate
+host-engine daemon) and a 9-panel Grafana dashboard
+(`observability/grafana/dashboards/vllm-benchmark.json`), all installed as
+standalone binaries (no Docker — the pod's container image doesn't support
+nested Docker) via `observability/install_observability_stack.sh`. Verified
+live end-to-end on a Phase 3 pod: confirmed vLLM 0.8.5's actual exposed
+metric names (rather than assuming), confirmed the GPU exporter's metric
+names, and confirmed via a live screenshot through RunPod's HTTP proxy that
+every dashboard panel renders real data during a load test — this also
+surfaced and fixed a Grafana 13.x CSRF "origin not allowed" bug specific to
+proxied access. Built `benchmarks/cost_model.py` for the $/1M-tokens cost
+model, purely retrospective against Phase 1/2's existing `results/*.json`
+(no re-run needed). Full details, exact metric names, and cost numbers in
+`context.md`.
 
 ## Phase 4 — Report
 

@@ -279,6 +279,129 @@ things stand and why.
   default does — worth noting in the report as a real memory/throughput
   tradeoff, not just "vLLM wins everything." Phase 2 is now complete.
 
+- **2026-07-02**: Provisioned a new pod for Phase 3: `qfmjbgucmcrkzs` (RTX
+  A5000, same spec as before), ports 22/8000/9090/3000/9835 exposed
+  (Prometheus, Grafana, nvidia_gpu_exporter UIs/APIs, in addition to
+  vLLM's 8000). Host driver 565.57.01 (newer again, still cu124-
+  compatible, no requirements.txt change needed). `rsync` again not
+  preinstalled on the fresh image — same one-line `apt-get install -y
+  rsync` fix as Phase 2.
+- **2026-07-02**: Confirmed vLLM 0.8.5's actual `/metrics` output (rather
+  than assuming from memory/docs) by curling a live fp16 server on the new
+  pod. Full metric set exposed (all prefixed `vllm:`):
+  - Gauges: `num_requests_running`, `num_requests_waiting`,
+    `gpu_cache_usage_perc`, `cache_config_info`.
+  - Counters: `prompt_tokens_total`, `generation_tokens_total`,
+    `request_success_total`, `gpu_prefix_cache_queries_total`,
+    `gpu_prefix_cache_hits_total`, `num_preemptions_total`.
+  - Histograms: `time_to_first_token_seconds`,
+    `time_per_output_token_seconds`, `e2e_request_latency_seconds`,
+    `request_queue_time_seconds`, `request_prefill_time_seconds`,
+    `request_decode_time_seconds`, `request_prompt_tokens`,
+    `request_generation_tokens`, `request_max_num_generation_tokens`,
+    `request_params_n`, `request_params_max_tokens`,
+    `iteration_tokens_total`.
+  This is everything the plan asked for (latency percentiles via the
+  histograms, throughput via the token counters, cache utilization via
+  `gpu_cache_usage_perc`) natively, no custom instrumentation needed —
+  confirms the plan's assumption was correct, now verified rather than
+  assumed. The Grafana dashboard's latency/throughput panels are built
+  directly on these metric names (see dashboard JSON,
+  `observability/grafana/dashboards/vllm-benchmark.json`).
+
+- **2026-07-02**: Chose `nvidia_gpu_exporter` over DCGM for the GPU
+  exporter (plan gave a choice, "whichever is simpler") — it's a single
+  static Go binary that wraps `nvidia-smi` (already proven working on
+  every pod so far in this project), vs. DCGM needing its own host-engine
+  daemon as a separate install/process. Installed via
+  `observability/install_observability_stack.sh`, launched via
+  `observability/launch_gpu_exporter.sh`. Verified its `/metrics` output
+  on the live pod (curl, not assumed) — real metric names include
+  `nvidia_smi_utilization_gpu_ratio`, `nvidia_smi_utilization_memory_ratio`,
+  `nvidia_smi_memory_used_bytes`/`memory_total_bytes`,
+  `nvidia_smi_power_draw_watts`, `nvidia_smi_temperature_gpu`, plus a lot
+  of clocks/ECC/PCIe detail not used in the dashboard. No install snags —
+  worked on the first try, unlike Grafana (see below).
+- **2026-07-02**: Prometheus 3.13.0 installed the same way (standalone
+  binary, no Docker — this pod's container image doesn't support nested
+  Docker) with `observability/prometheus.yml` scraping both vLLM (`:8000`)
+  and the GPU exporter (`:9835`). Verified via
+  `/api/v1/targets`: both `vllm` and `gpu` jobs came up `health: "up"` on
+  the first attempt.
+- **2026-07-02**: Grafana 13.1.0 install hit two real bugs in the first
+  draft of `observability/install_observability_stack.sh` /
+  `launch_grafana.sh`, both fixed and now reflected in those scripts (also
+  logged in root `CLAUDE.md` → Project Quirks):
+  1. The release tarball extracts to `grafana-13.1.0` (no `v` prefix),
+     not `grafana-v13.1.0` as the naming pattern for the other two tools
+     would suggest — the install script's symlink target was wrong,
+     caught immediately since the `grafana` symlink didn't resolve.
+  2. Grafana 13.x removed the separate `bin/grafana-server` binary — it's
+     now `bin/grafana server` (subcommand). Fixed the launch script's exec
+     line.
+  3. A more interesting one, found only once actually opening the
+     dashboard in a browser through RunPod's HTTP proxy
+     (`https://<pod-id>-3000.proxy.runpod.net`, needed since this project
+     has no VPN/tunnel set up to the pod): every panel showed a red
+     "origin not allowed" error, even though direct `curl` queries against
+     Prometheus with the identical PromQL returned correct data. Root
+     cause: Grafana's CSRF protection validates the browser's `Origin`
+     header against `root_url`/`csrf_trusted_origins`, and by default
+     knows nothing about the RunPod proxy's dynamically-generated
+     hostname. Fixed by adding an optional `PUBLIC_HOSTNAME` env var to
+     `launch_grafana.sh` that sets `GF_SERVER_ROOT_URL` and
+     `GF_SECURITY_CSRF_TRUSTED_ORIGINS` when accessing through the proxy
+     (not needed for direct/localhost/SSH-tunnel access). This is the kind
+     of bug that only surfaces by actually testing the UI in a browser,
+     not by checking that the processes started and ports opened — worth
+     remembering as a general lesson for any future reverse-proxied web
+     UI on a rented GPU box.
+- **2026-07-02**: End-to-end verification of the full observability
+  pipeline (not just "the processes are running"): started an fp16 vLLM
+  server, ran a live `benchmark_serving.py` load (concurrency=8, 300
+  ShareGPT prompts) against it, and confirmed via both (a) direct
+  Prometheus API queries and (b) a live screenshot of the Grafana
+  dashboard through the RunPod proxy that every one of the 9 dashboard
+  panels renders real, moving data: TTFT/TPOT/e2e-latency percentiles,
+  requests running/waiting, token throughput, KV-cache usage, GPU
+  utilization spiking to 100% during load bursts, GPU memory pinned at
+  ~22-24GB (consistent with vLLM's KV-cache pre-reservation seen in
+  Phase 1/2), and power draw/temperature tracking the load pattern.
+- **2026-07-02**: Built `benchmarks/cost_model.py` — computes $/1M output
+  tokens and $/1M total tokens per config/concurrency from
+  `results/*.json`'s `output_throughput`/`total_token_throughput` fields
+  and the RunPod hourly rate (`--hourly-rate`, defaults to $0.27). Purely
+  retrospective: reads Phase 1/2's already-saved JSON files, no GPU or
+  live server needed to run it. Headline numbers at concurrency=32
+  (sustained production throughput):
+
+  | config | $/1M output tokens | $/1M total tokens |
+  |---|---|---|
+  | AWQ (awq_marlin) | $0.0343 | $0.0161 |
+  | fp16 | $0.0565 | $0.0265 |
+  | GPTQ | $0.0691 | $0.0328 |
+  | baseline (naive HF) | $1.5529 | $0.7285 |
+
+  AWQ is the cheapest configuration per token at this concurrency (fastest
+  throughput), and the naive baseline is ~27-45x more expensive per token
+  than any vLLM config — the cost story is the direct inverse of the
+  throughput story from Phase 1/2, as expected since cost-per-token is
+  just rental-rate ÷ throughput.
+- **2026-07-02**: Clarifying which parts of Phase 3 are live-monitoring-only
+  vs. retrospective (explicitly asked in the Phase 3 kickoff): the cost
+  model (`benchmarks/cost_model.py`) is **fully retrospective** — it reads
+  Phase 1/2's existing `results/*.json` files, no benchmarks were re-run
+  and none need to be. Prometheus/Grafana, by contrast, are
+  **live-monitoring-only** — Prometheus only has data from the moment it
+  starts scraping onward, so there is no historical Prometheus data for
+  the Phase 1/2 benchmark runs (those completed before this observability
+  stack existed). Standing up Prometheus/Grafana did not require
+  re-running any of the Phase 1/2 concurrency sweeps; the one
+  `benchmark_serving.py` load generated during Phase 3
+  (concurrency=8, 300 prompts, fp16 only) was solely to produce live
+  traffic for verifying the dashboard renders correctly, not a formal
+  benchmark run, and its output was not saved to `results/`.
+
 ## Architecture Notes
 
 > (none yet — e.g. how the load generator is structured, how results are
@@ -299,3 +422,7 @@ here, so there's one source of truth to keep in sync).
   bug (`--quantization awq` instead of `awq_marlin`), not a real result. Full
   concurrency sweep re-run with the fix, all `results/awq-c*.json` files now
   reflect corrected numbers. See 2026-07-02 entries above. No longer open.
+- ~~Which metrics does vLLM 0.8.5 expose, and is a GPU exporter simple to
+  stand up~~ — resolved 2026-07-02: both confirmed live on a real pod, see
+  Phase 3 entries above. Phase 3 (Prometheus/Grafana/GPU exporter/cost
+  model) is now complete.

@@ -79,10 +79,26 @@ sync with `plan.md`).
 
 ## Phase 3 — Cost & Observability
 
-- [ ] Set up Prometheus scraping vLLM metrics endpoint
-- [ ] Set up GPU exporter (DCGM or nvidia-smi exporter)
-- [ ] Build Grafana dashboards
-- [ ] Build $/1M-tokens cost model per configuration
+- [x] Set up Prometheus scraping vLLM metrics endpoint — done 2026-07-02,
+      confirmed vLLM 0.8.5's real `/metrics` output on a live pod (not
+      assumed); `observability/prometheus.yml` scrapes it, verified `up`
+      via `/api/v1/targets`; see context.md for the full metric list
+- [x] Set up GPU exporter (DCGM or nvidia-smi exporter) — done 2026-07-02,
+      chose `nvidia_gpu_exporter` (single static binary, no DCGM
+      host-engine daemon needed); verified `/metrics` output live; see
+      context.md
+- [x] Build Grafana dashboards — done 2026-07-02,
+      `observability/grafana/dashboards/vllm-benchmark.json` (9 panels:
+      TTFT/TPOT/e2e latency, requests running/waiting, token throughput,
+      KV-cache usage, GPU utilization, GPU memory, GPU power/temp),
+      auto-provisioned via `observability/grafana/provisioning/`; verified
+      end-to-end with live load through the RunPod proxy (screenshot
+      confirmed all panels render real data) — hit and fixed a Grafana
+      13.x CSRF "origin not allowed" bug along the way (see context.md)
+- [x] Build $/1M-tokens cost model per configuration — done 2026-07-02,
+      `benchmarks/cost_model.py`, purely retrospective against existing
+      `results/*.json`; headline numbers in context.md (AWQ cheapest at
+      $0.0343/1M output tokens, naive baseline ~27-45x more expensive)
 
 ## Phase 4 — Report
 

@@ -1,0 +1,15 @@
+# Scrape config for local monitoring during a benchmark run: vLLM's own
+# built-in /metrics endpoint, plus the nvidia_gpu_exporter process running
+# alongside it. Both run on the same host as Prometheus here (single GPU
+# box), hence localhost targets.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: vllm
+    static_configs:
+      - targets: ["localhost:8000"]
+
+  - job_name: gpu
+    static_configs:
+      - targets: ["localhost:9835"]
