@@ -1,7 +1,7 @@
 # vLLM Benchmarking Harness — Build Plan
 
-Status: Phase 0 and Phase 1 complete (2026-07-01). Phase 2 (Baseline
-Comparison) is next.
+Status: Phase 0, Phase 1, and Phase 2 complete (2026-07-02). Phase 3 (Cost &
+Observability) is next.
 
 ## Phase 0 — Deploy ✅ done
 
@@ -32,13 +32,23 @@ full matrix run completed 2026-07-01 — see `context.md` for headline
 numbers and `results/` for raw output. Details, the vendoring rationale,
 and an `exec`-related process-cleanup fix are in `context.md`.
 
-## Phase 2 — Baseline Comparison
+## Phase 2 — Baseline Comparison ✅ done
 
-- Write a naive HuggingFace `transformers.generate()` inference script
-  (`baseline/`), deliberately separate from the vLLM serving code for a
-  clean A/B.
-- Run the same workloads (from Phase 1) against the baseline.
-- Compare vLLM (fp16/AWQ/GPTQ) vs baseline on throughput, latency, memory.
+Wrote `baseline/hf_inference_server.py`, a from-scratch FastAPI server
+implementing the real OpenAI `/v1/completions` SSE contract directly (no
+adapter needed — the vendored `benchmark_serving.py` client works
+unmodified), plus `baseline/launch_baseline.sh` and
+`benchmarks/run_baseline_matrix.sh`; none of it shares code with the vLLM
+path. "Naive" is scoped to no continuous batching (one `generate()` call
+in flight at a time) — a fairness audit (see `context.md`) fixed two
+one-line silent slow-path traps (fp32 default dtype, eager attention
+default) but left no-batching and no-`torch.compile` as documented,
+intentional caveats. Full concurrency sweep (1/4/8/16/32, same 100
+ShareGPT prompts as Phase 1) completed 2026-07-02 — see `context.md` for
+the full comparison: vLLM is 1.7-3.0x faster per-token even at
+concurrency=1 (kernel efficiency alone), and 22.6-45.5x higher throughput
+at concurrency=32 (kernel efficiency + continuous batching combined); the
+naive baseline uses ~3.1-3.3x less peak GPU memory throughout.
 
 ## Phase 3 — Cost & Observability
 

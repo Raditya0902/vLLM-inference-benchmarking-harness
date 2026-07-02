@@ -28,7 +28,16 @@ the start of a session, especially after a context reset.
   starts/stops each server itself): `./benchmarks/run_matrix.sh`
   (env overrides: `CONCURRENCY_LEVELS`, `NUM_PROMPTS`, `PORT`, `DATASET`,
   `RESULTS_DIR`)
-- Run baseline (HF) inference: `TBD` (Phase 2)
+- Start naive HF baseline server: `./baseline/launch_baseline.sh <model-repo> [port]`
+  (e.g. `./baseline/launch_baseline.sh meta-llama/Llama-3.2-3B-Instruct`) —
+  exposes the same OpenAI-compatible `/v1/completions` contract vLLM does,
+  so the same benchmark client works against it unmodified
+- Run baseline smoke test: `./benchmarks/smoke_test.sh <model-repo> [port]`
+  (same script as vLLM — needs the baseline server already running)
+- Run full baseline concurrency sweep (concurrency 1/4/8/16/32,
+  starts/stops the server itself): `./benchmarks/run_baseline_matrix.sh <model-repo>`
+  (env overrides: `CONCURRENCY_LEVELS`, `NUM_PROMPTS`, `PORT`, `DATASET`,
+  `RESULTS_DIR` — same convention as `run_matrix.sh`)
 - Start Prometheus/Grafana stack: `TBD` (Phase 3)
 - Generate report: `TBD` (Phase 4)
 
@@ -36,15 +45,27 @@ the start of a session, especially after a context reset.
 
 - Provider: RunPod (on-demand, secure cloud)
 - Instance type / GPU model: 1x RTX A5000, 24GB VRAM, $0.27/hr
-- Pod id: `gp5vv3dchw1t2a` (name `vllm-benchmark`) — check it's still running
-  with `runpodctl pod get gp5vv3dchw1t2a` before assuming it exists;
-  terminate with `runpodctl pod terminate gp5vv3dchw1t2a` when done to stop
-  billing
-- Driver / CUDA: NVIDIA driver 550.127.05, max CUDA 12.4 (see Quirks below)
+- **No pod currently provisioned** — pods are deleted once idle after each
+  work session to stop billing (Phase 0/1 pod `gp5vv3dchw1t2a` deleted
+  2026-07-02; its Phase 2 replacement `die22er57siiee` deleted the same day
+  once the baseline sweep finished). Re-provision with, e.g.:
+  `runpodctl pod create --name vllm-benchmark --image
+  "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04" --gpu-id
+  "NVIDIA RTX A5000" --gpu-count 1 --cloud-type SECURE
+  --container-disk-in-gb 40 --ports "22/tcp,8000/http"` (get the exact
+  `--gpu-id` string via `runpodctl gpu list` if this one stops matching),
+  then run `./scripts/setup_env.sh` on it — proven across Phase 0 and
+  Phase 2. Update this section with the new pod id/IP/port once created;
+  check status with `runpodctl pod get <pod-id>`, delete when idle with
+  `runpodctl pod delete <pod-id>` (aliases: `rm`, `remove` — note the
+  CLI has no `terminate` subcommand, despite the name; `delete` is correct).
+- Driver / CUDA: NVIDIA driver 550.127.05, max CUDA 12.4 on the Phase 0/1
+  pod (see Quirks below) — re-check on any new pod, a different host may
+  have a newer driver.
 - vLLM version: 0.8.5 (pinned, see `requirements.txt`)
 - SSH: `ssh -i ~/.runpod/ssh/runpodctl-ssh-key root@<pod-ip> -p <pod-ssh-port>`
-  — get current ip/port via `runpodctl pod get gp5vv3dchw1t2a -o json`
-  (they can change if the pod restarts)
+  — get current ip/port via `runpodctl pod get <pod-id> -o json` (they can
+  change if the pod restarts)
 - Repo lives on the pod at `/workspace/vllm-benchmarking-harness/` (synced via
   rsync, not git-cloned)
 - Exposed ports: 22/tcp (SSH), 8000/http (vLLM OpenAI-compatible endpoint).
@@ -93,6 +114,17 @@ the start of a session, especially after a context reset.
   throughput. `serving/launch_vllm.sh` and `benchmarks/run_matrix.sh` now
   default AWQ to `awq_marlin`. See `dev/active/vllm-benchmarking/context.md`
   for the re-run numbers.
+- **Fresh RunPod images may not have `rsync` preinstalled**: hit this
+  re-provisioning for Phase 2 (`runpod/pytorch:2.4.0-...` base image) — the
+  fix is just `apt-get update && apt-get install -y rsync` on the pod
+  before the first `rsync` push from the local machine; not (yet) folded
+  into `scripts/setup_env.sh` since it's a one-line manual fix so far.
+- The naive HF baseline (`baseline/hf_inference_server.py`) needs
+  `HF_TOKEN` for the same reason vLLM's fp16 config does (gated repo) —
+  copy the local `~/.cache/huggingface/token` file to the same path on a
+  fresh pod via `scp` rather than exporting it as an env var or writing it
+  into a shell rc file (avoids the secret sitting in a command line or a
+  persisted startup script).
 
 ## Active Work
 

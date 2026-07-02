@@ -122,6 +122,162 @@ things stand and why.
   AWQ numbers and is competitive with or ahead of fp16/GPTQ on throughput.
   Phase 1 is now fully complete with correct data — no more open AWQ
   question for Phase 4.
+- **2026-07-02**: Deleted the Phase 0/1 pod (`gp5vv3dchw1t2a`) once idle to
+  stop billing between work sessions — Phase 2 script-writing doesn't need
+  a GPU. Will re-provision (new pod, `scripts/setup_env.sh`) only when it's
+  time to actually deploy/run something. Also: `runpodctl pod terminate`
+  (as documented in `CLAUDE.md` up to this point) isn't a real subcommand —
+  the correct one is `runpodctl pod delete <id>` (aliases `rm`/`remove`).
+  Fixed in `CLAUDE.md`.
+- **2026-07-02**: Designed `baseline/hf_inference_server.py` (Phase 2) by
+  first reading `benchmarks/vendor/backend_request_func.py`'s
+  `async_request_openai_completions` (what the vendored client's
+  `--backend vllm`/`openai` maps to, and the default `--endpoint
+  /v1/completions`) to get the exact wire contract: `POST
+  /v1/completions` with `{model, prompt, max_tokens, temperature: 0.0,
+  stream: true, stream_options: {include_usage: true}}`, response as
+  OpenAI-style SSE (`data: {"choices":[{"text": "..."}]}` per chunk,
+  final `data: {"usage": {"completion_tokens": N}}`, terminated by `data:
+  [DONE]`). This is a real, standard OpenAI-compatible contract, not
+  something baseline-specific — so the baseline implements it directly
+  (FastAPI + `TextIteratorStreamer` off a background thread bridged into
+  an `asyncio.Queue`) rather than needing a thin adapter in front of some
+  other API shape. No code is shared with `serving/launch_vllm.sh` or the
+  vLLM path — separate script, separate launcher
+  (`baseline/launch_baseline.sh`), separate sweep orchestrator
+  (`benchmarks/run_baseline_matrix.sh`, modeled on `run_matrix.sh`'s
+  structure but not sharing code with it either). "Naive" is scoped
+  deliberately to one thing: **no continuous batching** — a single
+  `asyncio.Lock` means only one `generate()` call runs at a time, so
+  concurrent requests queue server-side exactly like a hand-rolled
+  from-scratch server would, with no custom batching logic. That's the
+  entire point of the vLLM comparison (PagedAttention + continuous
+  batching vs. none), so it stays as designed rather than being "fixed."
+- **2026-07-02**: Fairness audit for `baseline/hf_inference_server.py`
+  before running anything, per the request to flag silent slow-path traps
+  without artificially crippling the baseline:
+  - **Fixed (one-line, standard, not a real optimization)**:
+    `torch_dtype="auto"` in `from_pretrained` — without this,
+    `transformers` defaults to fp32, which isn't a "naive" choice so much
+    as an accidental 2x+ tensor-core slowdown nobody would intentionally
+    pick; `"auto"` just loads the checkpoint's own dtype (bf16 for
+    Llama-3.2-3B-Instruct), matching how the vLLM "fp16" config was
+    actually also auto-dtype (see the fp16-deploy entry above — same
+    parity concern).
+  - **Fixed (one-line, vanilla-library default, not an optimization
+    library)**: `attn_implementation="sdpa"` — PyTorch's built-in fused
+    attention, shipped in vanilla `torch`/`transformers` with no extra
+    dependency. Set explicitly because relying on the implicit default
+    risks silently landing on the much slower pure-Python "eager"
+    attention path depending on transformers/torch version. This is what
+    a competent from-scratch script would set, not a hand-tuned
+    optimization — deliberately did *not* reach for `flash-attn` (a
+    separate optimization package) or `torch.compile` for the same
+    reason.
+  - **Documented as caveats, not fixed** (these are the actual point of
+    the comparison, or aren't one-line/well-understood enough to bolt on
+    safely):
+    - **No continuous batching** (see design note above) — the main
+      thing the comparison exists to measure.
+    - **No `torch.compile`** — the project brief explicitly calls for a
+      "naive HuggingFace `transformers.generate()` baseline"; adding
+      graph compilation would blur that line and isn't a one-line change
+      (needs shape-stable inputs, warmup runs, recompilation handling for
+      variable-length ShareGPT prompts).
+    - **`TextIteratorStreamer` chunk granularity** isn't guaranteed
+      strictly one-token-per-SSE-chunk (multi-byte UTF-8 continuation
+      tokens can be buffered together before being decodable) — TTFT
+      should still be accurate (first chunk is still first-token
+      arrival), but per-token ITL numbers may be very slightly coarser
+      than vLLM's true per-token stream. Not fixable without a custom
+      streamer; acceptable at this project's fidelity level.
+    - **Single global lock also serializes GPU memory reuse** — since
+      only one request's KV cache exists at a time, peak GPU memory
+      during the baseline sweep should be *lower* than any of the vLLM
+      configs (which pre-reserve a large KV-cache block pool). Expected
+      and worth calling out plainly in the Phase 4 report as a
+      memory-efficiency, not just speed, comparison point.
+- **2026-07-02**: Re-provisioned a pod for Phase 2 (Phase 0/1 pod was
+  deleted once idle — see entry above): new pod `die22er57siiee`, same
+  RTX A5000/secure-cloud spec via `runpodctl pod create` with the same
+  image/ports/disk as Phase 0. Notable differences from the Phase 0 pod,
+  neither requiring changes: newer host driver (570.211.01, CUDA 12.8
+  reported vs. 550.127.05/12.4 before) — our cu124-pinned torch/vllm stack
+  is backward compatible so no requirements.txt change was needed; and
+  `rsync` wasn't preinstalled on the fresh image (`apt-get install rsync`
+  fixed it — worth adding to `scripts/setup_env.sh` if this recurs).
+  `HF_TOKEN` from the deleted pod didn't carry over (expected, new pod);
+  copied the local machine's own cached `~/.cache/huggingface/token` file
+  to the pod's same path via `scp` (not via env var/`.bashrc`, to avoid
+  putting the secret on a command line or in a persisted shell-startup
+  file) — `huggingface_hub` picks it up automatically from there.
+- **2026-07-02**: Ran the baseline concurrency sweep (1/4/8/16/32, 100
+  ShareGPT prompts each, same dataset/seed as Phase 1) via
+  `benchmarks/run_baseline_matrix.sh`. Smoke test passed first (2/2
+  requests, ~44.6 tok/s aggregate on 890 generated tokens). Total sweep
+  wall time was ~40 minutes — in line with the pre-run estimate from the
+  smoke test's per-token rate, so no need to cut `NUM_PROMPTS` or
+  concurrency levels short (all 5 levels ran at the full 100 prompts, same
+  as the Phase 1 vLLM matrix). Results: `results/baseline-c*.json`,
+  `.gpu.csv`, `baseline.server.log`.
+
+  | concurrency | req/s | output tok/s | median TTFT (ms) | median TPOT (ms) | peak GPU mem |
+  |---|---|---|---|---|---|
+  | 1  | 0.24 | 48.1 | 36.8     | 21.24 | 6907 MiB |
+  | 4  | 0.25 | 48.7 | 11,434.9 | 20.96 | 6743 MiB |
+  | 8  | 0.24 | 48.1 | 28,035.9 | 21.08 | 6949 MiB |
+  | 16 | 0.25 | 48.7 | 56,064.2 | 20.53 | 6743 MiB |
+  | 32 | 0.24 | 48.3 | 111,705.0| 21.35 | 6949 MiB |
+
+  Exactly as expected from the design (see the no-continuous-batching note
+  above): output throughput is flat (~48 tok/s) across every concurrency
+  level, because the baseline processes one request at a time regardless
+  of how many arrive concurrently — extra concurrent requests just queue
+  behind the global lock instead of being batched. Median TTFT grows
+  roughly linearly with concurrency (from 37ms at c1 to ~112s at c32)
+  purely from that queueing delay, not from any per-request slowdown
+  (median TPOT stays ~21ms at every level). Peak GPU memory also stays
+  flat (~6.7-6.9GB) since only one request's KV cache exists at a time —
+  confirms the memory-efficiency caveat noted in the audit above.
+- **2026-07-02**: vLLM vs. baseline comparison (Phase 2 goal). Two framings,
+  both useful for the Phase 4 report:
+
+  **Single request (concurrency=1, no batching benefit for either side)** —
+  isolates raw kernel/execution efficiency from batching:
+
+  | config | output tok/s | median TTFT (ms) | median TPOT (ms) | peak GPU mem |
+  |---|---|---|---|---|
+  | baseline (naive HF) | 48.1  | 36.8 | 21.24 | 6907 MiB |
+  | vLLM fp16            | 80.4  | 22.9 | 12.39 | 22,303 MiB |
+  | vLLM AWQ (awq_marlin) | 143.4 | 19.0 | 6.84  | 21,647 MiB |
+  | vLLM GPTQ             | 146.3 | 32.7 | 6.67  | 22,431 MiB |
+
+  Even with no batching advantage, vLLM is **1.7x (fp16) to ~3.0x
+  (AWQ/GPTQ) faster per-token** than naive `generate()` — CUDA graphs,
+  fused kernels, and (for AWQ/GPTQ) quantized matmul kernels all help even
+  at batch size 1. This isolates "vLLM's execution engine is faster" from
+  "vLLM also batches," which the concurrency=32 numbers below conflate.
+
+  **High concurrency (concurrency=32)** — the realistic serving scenario,
+  where vLLM's continuous batching compounds with its per-token speed
+  advantage:
+
+  | config | output tok/s | median TTFT (ms) | peak GPU mem |
+  |---|---|---|---|
+  | baseline (naive HF) | 48.3   | 111,705.0 | 6949 MiB |
+  | vLLM fp16            | 1327.5 | 33.8      | 22,305 MiB |
+  | vLLM AWQ (awq_marlin) | 2187.9 | 24.3      | 21,647 MiB |
+  | vLLM GPTQ             | 1086.2 | 58.1      | 22,433 MiB |
+
+  At realistic concurrency, vLLM's throughput advantage over the naive
+  baseline is **~22.6x (GPTQ) to ~45.5x (AWQ)**, and TTFT is ~2000-4600x
+  lower — a naive server without batching effectively falls over under
+  concurrent load (TTFT climbs linearly with queue depth) while vLLM's
+  TTFT barely moves. The flip side: the baseline uses ~3.1-3.3x *less*
+  peak GPU memory at every concurrency level, since it never pre-reserves
+  a KV-cache block pool the way vLLM's `gpu_memory_utilization=0.9`
+  default does — worth noting in the report as a real memory/throughput
+  tradeoff, not just "vLLM wins everything." Phase 2 is now complete.
 
 ## Architecture Notes
 

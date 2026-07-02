@@ -20,3 +20,9 @@ huggingface_hub
 pandas
 datasets
 pillow
+
+# Phase 2 baseline server (baseline/hf_inference_server.py) — a from-scratch
+# FastAPI wrapper around transformers.generate(), deliberately not vllm.
+# fastapi/uvicorn aren't vllm deps, and transformers is already pinned above.
+fastapi
+uvicorn

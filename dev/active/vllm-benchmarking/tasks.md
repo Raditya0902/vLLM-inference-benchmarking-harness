@@ -58,9 +58,24 @@ sync with `plan.md`).
 
 ## Phase 2 — Baseline Comparison
 
-- [ ] Write naive HF `transformers.generate()` baseline script
-- [ ] Run baseline against same workloads as Phase 1
-- [ ] Compare vLLM (fp16/AWQ/GPTQ) vs baseline results
+- [x] Write naive HF `transformers.generate()` baseline script —
+      `baseline/hf_inference_server.py` (+ `baseline/launch_baseline.sh`
+      launcher, `benchmarks/run_baseline_matrix.sh` sweep orchestrator),
+      done 2026-07-02; implements the real OpenAI `/v1/completions` SSE
+      contract directly (no adapter needed) so the vendored
+      `benchmark_serving.py` client works unmodified; see context.md for
+      design notes and the fairness audit (dtype/attention fixes made,
+      no-batching/no-torch.compile documented as intentional)
+- [x] Run baseline against same workloads as Phase 1 — done 2026-07-02,
+      full concurrency sweep (1/4/8/16/32, 100 ShareGPT prompts each) via
+      `benchmarks/run_baseline_matrix.sh`; smoke test passed first; sweep
+      took ~40 min total (no need to cut prompt count/levels short); see
+      context.md for the full table
+- [x] Compare vLLM (fp16/AWQ/GPTQ) vs baseline results — done 2026-07-02,
+      two framings in context.md: single-request (isolates kernel
+      efficiency: vLLM 1.7-3.0x faster per-token) and concurrency=32
+      (realistic serving: vLLM 22.6-45.5x higher throughput, baseline uses
+      ~3.1-3.3x less peak GPU memory at every level)
 
 ## Phase 3 — Cost & Observability
 
