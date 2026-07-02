@@ -6,8 +6,14 @@
 #
 # Examples:
 #   ./serving/launch_vllm.sh meta-llama/Llama-3.2-3B-Instruct
-#   ./serving/launch_vllm.sh casperhansen/llama-3.2-3b-instruct-awq awq
+#   ./serving/launch_vllm.sh casperhansen/llama-3.2-3b-instruct-awq awq_marlin
 #   ./serving/launch_vllm.sh ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3 gptq
+#
+# Use awq_marlin (not awq) for Marlin-compatible AWQ checkpoints on Ampere+
+# GPUs — passing awq explicitly forces vLLM 0.8.5 off the fast Marlin kernel
+# path even when the model supports it. See dev/active/vllm-benchmarking/
+# context.md (AWQ investigation) for the ~3.5x throughput difference this
+# makes.
 set -euo pipefail
 
 MODEL="${1:?Usage: launch_vllm.sh <model-repo> [quantization] [port]}"
@@ -35,4 +41,7 @@ if [[ -n "$DTYPE" ]]; then
   ARGS+=(--dtype "$DTYPE")
 fi
 
-vllm serve "$MODEL" "${ARGS[@]}"
+# exec replaces this script's process with vllm serve so callers that
+# background this script and capture `$!` can kill the actual server
+# process, not an orphaned child.
+exec vllm serve "$MODEL" "${ARGS[@]}"

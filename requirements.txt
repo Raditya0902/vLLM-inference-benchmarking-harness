@@ -13,3 +13,10 @@ vllm==0.8.5
 # Pin to the minor version contemporary with vllm 0.8.5.
 transformers>=4.51.1,<4.52.0
 huggingface_hub
+
+# Phase 1 benchmark harness (benchmarks/vendor/, from vllm v0.8.5's
+# benchmarks/ dir) imports these directly; not guaranteed to come in
+# transitively via vllm's own deps.
+pandas
+datasets
+pillow

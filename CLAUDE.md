@@ -16,13 +16,19 @@ the start of a session, especially after a context reset.
 ## Key Commands
 
 - One-time env setup on a fresh GPU box: `./scripts/setup_env.sh`
-- Start vLLM server: `./serving/launch_vllm.sh <model-repo> [awq|gptq] [port]`
+- Start vLLM server: `./serving/launch_vllm.sh <model-repo> [awq_marlin|gptq] [port]`
   - fp16: `./serving/launch_vllm.sh meta-llama/Llama-3.2-3B-Instruct`
-  - AWQ: `./serving/launch_vllm.sh casperhansen/llama-3.2-3b-instruct-awq awq`
+  - AWQ: `./serving/launch_vllm.sh casperhansen/llama-3.2-3b-instruct-awq awq_marlin`
   - GPTQ: `./serving/launch_vllm.sh ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3 gptq`
+- One-time dataset download (ShareGPT workload): `./scripts/download_dataset.sh`
+- Run smoke test (single small request, before a full benchmark run):
+  `./benchmarks/smoke_test.sh <model-repo> [port]` — needs a vLLM server
+  already running on that port
+- Run full benchmark matrix (fp16/AWQ/GPTQ × concurrency 1/4/8/16/32,
+  starts/stops each server itself): `./benchmarks/run_matrix.sh`
+  (env overrides: `CONCURRENCY_LEVELS`, `NUM_PROMPTS`, `PORT`, `DATASET`,
+  `RESULTS_DIR`)
 - Run baseline (HF) inference: `TBD` (Phase 2)
-- Run benchmark suite: `TBD` (Phase 1)
-- Run smoke test (single small request, before a full benchmark run): `TBD` (Phase 1)
 - Start Prometheus/Grafana stack: `TBD` (Phase 3)
 - Generate report: `TBD` (Phase 4)
 
@@ -67,6 +73,26 @@ the start of a session, especially after a context reset.
   `--dtype float16` — this vllm version's GPTQ kernel doesn't support
   bfloat16. `serving/launch_vllm.sh` sets this automatically whenever
   `quantization=gptq` (override via `DTYPE`).
+- Both `serving/launch_vllm.sh` and `benchmarks/capture_gpu_stats.sh` end
+  with `exec <real command>`, not a bare final command — required so that
+  backgrounding either script and later doing `kill "$!"` actually stops
+  the real process (`vllm serve` / `nvidia-smi`) instead of orphaning it
+  under a dead wrapper shell. Keep this pattern if you add similar
+  start/stop-controlled scripts.
+- `benchmarks/vendor/` holds vLLM v0.8.5's own `benchmark_serving.py` +
+  helpers, vendored unmodified rather than reimplemented (see
+  `benchmarks/vendor/README.md` and `dev/active/vllm-benchmarking/context.md`
+  for why). Don't hand-edit those files — wrapper scripts live one level up
+  in `benchmarks/`.
+- **AWQ needs `--quantization awq_marlin`, not `awq`**: on this Ampere
+  (A5000, compute cap 8.6) card, vLLM 0.8.5 detects that
+  `casperhansen/llama-3.2-3b-instruct-awq` is Marlin-compatible but only
+  auto-upgrades to the fast `awq_marlin` kernel when `--quantization` is
+  left unset — passing `awq` explicitly (the Phase 1 default) forces the
+  slow, "not fully optimized" fallback kernel and measured ~3.5x lower
+  throughput. `serving/launch_vllm.sh` and `benchmarks/run_matrix.sh` now
+  default AWQ to `awq_marlin`. See `dev/active/vllm-benchmarking/context.md`
+  for the re-run numbers.
 
 ## Active Work
 

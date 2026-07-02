@@ -8,6 +8,9 @@ models/**/*.gguf
 results/*
 !results/.gitkeep
 
+# Downloaded benchmark datasets (large, regenerable via scripts/download_dataset.sh)
+datasets/
+
 # Python
 __pycache__/
 *.pyc

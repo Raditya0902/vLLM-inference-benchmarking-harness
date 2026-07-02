@@ -24,17 +24,37 @@ sync with `plan.md`).
 
 ## Phase 1 — Benchmark Harness
 
-- [ ] Build load generator / request scheduler
-- [ ] Source a realistic workload for the load generator (e.g. a sampled
-      ShareGPT conversation dataset) instead of synthetic fixed-length
-      prompts
-- [ ] Implement concurrency sweep support
-- [ ] Implement latency percentile collection (p50/p95/p99)
-- [ ] Implement throughput collection (tokens/s, requests/s)
-- [ ] Implement GPU memory/utilization capture
-- [ ] **Standing task — repeat every time harness code changes:** run a
+- [x] Build load generator / request scheduler — vendored vLLM v0.8.5's
+      `benchmarks/benchmark_serving.py` (see context.md) instead of writing
+      one from scratch; wrapped with `benchmarks/run_matrix.sh`
+- [x] Source a realistic workload for the load generator — ShareGPT
+      (`scripts/download_dataset.sh`), supported natively by the vendored
+      script (`--dataset-name sharegpt`)
+- [x] Implement concurrency sweep support — `--max-concurrency`, swept via
+      `benchmarks/run_matrix.sh` (default levels: 1/4/8/16/32)
+- [x] Implement latency percentile collection (p50/p95/p99) — TTFT/TPOT/ITL
+      mean/median/P99 built into the vendored script's output + saved JSON
+- [x] Implement throughput collection (tokens/s, requests/s) — built into
+      the vendored script's output + saved JSON
+- [x] Implement GPU memory/utilization capture — `benchmarks/capture_gpu_stats.sh`
+      (nvidia-smi polling, not part of the vendored script), run alongside
+      each benchmark invocation by `run_matrix.sh`
+- [x] **Standing task — repeat every time harness code changes:** run a
       single small request / small-batch smoke test before running the full
-      benchmark matrix
+      benchmark matrix — `benchmarks/smoke_test.sh`, run 2026-07-01 before
+      the full matrix
+- [x] Full concurrency matrix run (fp16/AWQ/GPTQ x concurrency 1/4/8/16/32,
+      100 prompts each) — completed 2026-07-01, 15 result files in
+      `results/` (see context.md for headline numbers)
+- [x] Investigate unexpectedly slow AWQ result — root-caused 2026-07-02 as a
+      config bug (`--quantization awq` forcing the slow kernel instead of
+      `awq_marlin`); fixed in `run_matrix.sh`/`launch_vllm.sh` (see
+      context.md)
+- [x] Re-run the full AWQ concurrency sweep (1/4/8/16/32) with the
+      `awq_marlin` fix — done 2026-07-02, smoke test passed first,
+      `results/awq-c*.json`/`.gpu.csv`/`awq.server.log` overwritten with
+      corrected numbers (fp16/GPTQ results untouched); see context.md for
+      the full table
 
 ## Phase 2 — Baseline Comparison
 

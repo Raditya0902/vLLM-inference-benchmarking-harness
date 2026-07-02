@@ -1,6 +1,7 @@
 # vLLM Benchmarking Harness — Build Plan
 
-Status: Phase 0 complete (2026-07-01). Phase 1 (Benchmark Harness) is next.
+Status: Phase 0 and Phase 1 complete (2026-07-01). Phase 2 (Baseline
+Comparison) is next.
 
 ## Phase 0 — Deploy ✅ done
 
@@ -18,19 +19,18 @@ along the way (CUDA/driver pin, transformers pin, context-length cap, GPTQ
 dtype) — see `context.md` for details and `CLAUDE.md` Project Quirks for the
 durable reference.
 
-## Phase 1 — Benchmark Harness
+## Phase 1 — Benchmark Harness ✅ done
 
-- Build the load generator / request scheduler (`benchmarks/`).
-- Use a realistic workload for the load generator (e.g. a sampled ShareGPT
-  conversation dataset), not synthetic fixed-length prompts — real prompt/
-  response length distributions matter for latency and throughput numbers.
-- Support concurrency sweeps (varying number of simultaneous requests).
-- Collect latency percentiles (p50/p95/p99) and throughput (tokens/s,
-  requests/s).
-- Capture GPU memory/utilization during runs.
-- **Smoke-test discipline**: after any harness code change, run one small
-  request / small-batch test before running the full benchmark matrix.
-  Tracked as a standing checklist item in `tasks.md`, not just a note here.
+Vendored vLLM v0.8.5's own `benchmarks/benchmark_serving.py` (+ its 3
+helper modules) into `benchmarks/vendor/` instead of writing a load
+generator from scratch — it already covered ShareGPT sampling,
+`--max-concurrency` sweeps, and TTFT/TPOT/ITL percentile + throughput
+reporting. Added `benchmarks/capture_gpu_stats.sh` (nvidia-smi polling,
+the one thing missing) and `benchmarks/run_matrix.sh` (orchestrates the
+fp16/AWQ/GPTQ × concurrency sweep, one server config at a time). First
+full matrix run completed 2026-07-01 — see `context.md` for headline
+numbers and `results/` for raw output. Details, the vendoring rationale,
+and an `exec`-related process-cleanup fix are in `context.md`.
 
 ## Phase 2 — Baseline Comparison
 
