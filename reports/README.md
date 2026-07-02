@@ -173,6 +173,43 @@ further — a genuine limitation of approximating "static batching" with
 vLLM's own knobs rather than a separate serving system built to actually
 process fixed batches to completion.
 
+### Does this generalize? (1B vs. 3B)
+
+Everything above is for Llama-3.2-3B. To check whether it holds at a
+different model size, the same fp16/AWQ/GPTQ sweep (concurrency 1/4/8/16/32,
+100 ShareGPT prompts) was re-run against Llama-3.2-1B-Instruct, using
+pre-quantized checkpoints in the same format/methodology as the 3B ones
+(`AMead10/Llama-3.2-1B-Instruct-AWQ` — identical `bits=4/group_size=128/
+awq_marlin`-compatible config to the 3B AWQ checkpoint;
+`ModelCloud/Llama-3.2-1B-Instruct-gptqmodel-4bit-vortex-v2.5` — same
+publisher and `gptqmodel` methodology, same `group_size=32`, as the 3B
+GPTQ checkpoint).
+
+![Cost per 1M output tokens, 1B vs. 3B](images/cost_1b_vs_3b.png)
+
+| conclusion from the 3B results | holds at 1B? | evidence |
+|---|---|---|
+| AWQ wins on cost/throughput | **yes** | AWQ is cheapest at both sizes: $0.019/1M (1B) and $0.034/1M (3B) at concurrency=32, vs. fp16 ($0.024 / $0.056) and GPTQ ($0.029 / $0.069) |
+| GPTQ edges out AWQ at concurrency=1, then falls behind as concurrency rises | **yes** | 1B: GPTQ leads at c=1 (303.1 vs. AWQ's 247.7 tok/s) but ends up *slower than fp16* at c=32 (2631.3 vs. fp16's 3072.1) — the same crossover shape as 3B (GPTQ 146.3 vs. AWQ 143.4 at c=1, then GPTQ 1086.2 < fp16 1327.5 at c=32) |
+| GPTQ's median TTFT degrades faster than AWQ's/fp16's under load | **yes** | 1B GPTQ median TTFT: 20.2ms (c=1) → 37.7ms (c=32), ending worse than both fp16 (20.4ms) and AWQ (21.8ms) — mirrors the 3B finding (32.7ms → 58.1ms) |
+| baseline gap (vLLM vs. naive HF) scales similarly | **not measured** | this addendum only swept fp16/AWQ/GPTQ for 1B, not the naive baseline — stating this as a gap rather than guessing |
+
+One thing that did **not** scale the way intuition would suggest: **peak
+GPU memory is nearly identical between 1B and 3B** (1B: 21.3–21.6 GiB vs.
+3B: 21.1–21.9 GiB, at every concurrency level, for every config). A 3x
+smaller model does not use proportionally less memory here, because
+vLLM's default `gpu_memory_utilization=0.9` pre-reserves ~90% of the
+card's memory for the KV-cache block pool at startup regardless of how
+small the model's own weights are — on this GPU/config, memory footprint
+is dominated by that reservation policy, not by model size. Anyone
+sizing a deployment around "smaller model → less memory" on a
+single shared GPU should check `gpu_memory_utilization` first.
+
+Net: the qualitative story (AWQ fastest/cheapest, GPTQ's TTFT/high-
+concurrency weakness, memory dominated by KV-cache reservation not model
+size) reproduces at 1B with no exceptions found. The one open question is
+the baseline comparison, which wasn't in scope for this addendum.
+
 ## Headline Findings
 
 **1. A config bug, not a quantization result, initially made AWQ look like
@@ -236,9 +273,12 @@ combination as a default choice.
   were stood up after the Phase 1/2 benchmark runs completed, so there is
   no historical Prometheus data for the numbers in this report; they were
   verified against a separate live load-test, not the sweep data above.
-- **One model size** — all results are for Llama-3.2-3B specifically;
-  the fp16-vs-quantized tradeoff and kernel behavior could differ at
-  larger model sizes where memory pressure and compute-bound-ness shift.
+- **Only two model sizes, both ≤3B** — the core results are for
+  Llama-3.2-3B; a 1B generalization check (see "Does this generalize?"
+  above) reproduced the same qualitative rankings, but larger models
+  (8B+) where memory pressure and compute-bound-ness shift more
+  significantly were never tested, and the 1B check didn't include the
+  naive HF baseline.
 - **One workload shape** — ShareGPT-distributed prompt/output lengths only;
   a workload with very long contexts or very short completions could shift
   which config wins (e.g. TTFT-bound vs. throughput-bound workloads).

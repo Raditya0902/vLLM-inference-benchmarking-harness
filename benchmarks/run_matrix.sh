@@ -6,7 +6,11 @@
 # alongside), then stop the server before moving to the next config.
 #
 # Usage: ./benchmarks/run_matrix.sh
-# Env overrides: CONCURRENCY_LEVELS, NUM_PROMPTS, PORT, DATASET, RESULTS_DIR
+# Env overrides: CONCURRENCY_LEVELS, NUM_PROMPTS, PORT, DATASET, RESULTS_DIR,
+# CONFIGS_OVERRIDE (newline-separated "name:model:quantization" entries, to
+# sweep a different model size/set without editing this file — e.g. the 1B
+# generalization check in Phase 5 uses this to point at 1B checkpoints while
+# keeping result filenames distinguished via RESULTS_DIR/name prefix)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -23,11 +27,15 @@ HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-600}"
 # --quantization is left unset entirely; passing awq explicitly forces the
 # slow unoptimized path (see context.md AWQ investigation for the ~3.5x
 # throughput difference this makes).
-CONFIGS=(
-  "fp16:meta-llama/Llama-3.2-3B-Instruct:"
-  "awq:casperhansen/llama-3.2-3b-instruct-awq:awq_marlin"
-  "gptq:ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3:gptq"
-)
+if [[ -n "${CONFIGS_OVERRIDE:-}" ]]; then
+  readarray -t CONFIGS <<< "$CONFIGS_OVERRIDE"
+else
+  CONFIGS=(
+    "fp16:meta-llama/Llama-3.2-3B-Instruct:"
+    "awq:casperhansen/llama-3.2-3b-instruct-awq:awq_marlin"
+    "gptq:ModelCloud/Llama-3.2-3B-Instruct-gptqmodel-4bit-vortex-v3:gptq"
+  )
+fi
 
 mkdir -p "$RESULTS_DIR"
 

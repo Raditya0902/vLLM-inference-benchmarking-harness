@@ -15,7 +15,7 @@ import json
 import re
 from pathlib import Path
 
-RESULT_FILENAME_RE = re.compile(r"^(?P<config>[a-zA-Z0-9]+)-c(?P<concurrency>\d+)\.json$")
+RESULT_FILENAME_RE = re.compile(r"^(?P<config>.+)-c(?P<concurrency>\d+)\.json$")
 
 
 def load_results(results_dir: Path) -> list[dict]:

@@ -193,6 +193,68 @@ def plot_batching_comparison(results_dir: Path, out_dir: Path) -> bool:
     return True
 
 
+SIZE_CONFIGS = [
+    ("fp16", "fp16"),
+    ("awq", "AWQ (awq_marlin)"),
+    ("gptq", "GPTQ"),
+]
+
+
+def plot_1b_vs_3b_cost(results_dir: Path, out_dir: Path) -> bool:
+    """Phase 5 addendum chart: $/1M output tokens, 1B vs. 3B side by side
+    for each quant config at concurrency=32. Returns False (no-op) if the
+    1B sweep hasn't been run yet, since this chart is optional relative to
+    the core Phase 1-4 set."""
+    concurrency = 32
+    have_1b = any(
+        (results_dir / f"1b-{name}-c{concurrency}.json").exists()
+        for name, _ in SIZE_CONFIGS
+    )
+    if not have_1b:
+        return False
+
+    def cost(name: str, prefix: str) -> float | None:
+        path = results_dir / f"{prefix}{name}-c{concurrency}.json"
+        if not path.exists():
+            return None
+        throughput = json.loads(path.read_text())["output_throughput"]
+        return (HOURLY_RATE / 3600) / throughput * 1_000_000
+
+    fig, ax = plt.subplots(figsize=(7, 4.5), facecolor=SURFACE)
+    x = range(len(SIZE_CONFIGS))
+    width = 0.32
+    costs_1b = [cost(name, "1b-") for name, _ in SIZE_CONFIGS]
+    costs_3b = [cost(name, "") for name, _ in SIZE_CONFIGS]
+    bars_1b = ax.bar(
+        [i - width / 2 for i in x], costs_1b, width, color="#2a78d6", label="1B"
+    )
+    bars_3b = ax.bar(
+        [i + width / 2 for i in x], costs_3b, width, color="#1baf7a", label="3B"
+    )
+    for bars in (bars_1b, bars_3b):
+        for bar in bars:
+            h = bar.get_height()
+            if h:
+                ax.annotate(
+                    f"${h:.3f}",
+                    (bar.get_x() + bar.get_width() / 2, h),
+                    ha="center",
+                    va="bottom",
+                    fontsize=8,
+                    color=INK_PRIMARY,
+                )
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([label for _, label in SIZE_CONFIGS])
+    ax.set_ylabel("$ / 1M output tokens")
+    ax.set_title(f"Cost per 1M Output Tokens: 1B vs. 3B (concurrency={concurrency})")
+    style_axes(ax)
+    ax.legend(frameon=False, labelcolor=INK_SECONDARY, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out_dir / "cost_1b_vs_3b.png", dpi=150)
+    plt.close(fig)
+    return True
+
+
 def plot_memory_tradeoff(peaks: dict, out_dir: Path) -> None:
     concurrency = 32
     fig, ax = plt.subplots(figsize=(6, 4.5), facecolor=SURFACE)
@@ -238,12 +300,18 @@ def main() -> None:
     plot_cost_per_1m_tokens(results, args.out_dir)
     plot_memory_tradeoff(peaks, args.out_dir)
     batching_chart_written = plot_batching_comparison(args.results_dir, args.out_dir)
+    size_chart_written = plot_1b_vs_3b_cost(args.results_dir, args.out_dir)
 
     print(f"Charts written to {args.out_dir}")
     if not batching_chart_written:
         print(
             "(batching_comparison.png skipped — run "
             "benchmarks/run_batching_comparison.sh first)"
+        )
+    if not size_chart_written:
+        print(
+            "(cost_1b_vs_3b.png skipped — run the 1B matrix sweep first, "
+            "see CONFIGS_OVERRIDE in benchmarks/run_matrix.sh)"
         )
 
 
