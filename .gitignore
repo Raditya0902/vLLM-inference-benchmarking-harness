@@ -16,6 +16,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.venv-reports/
 
 # Env / secrets
 .env

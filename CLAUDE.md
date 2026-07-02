@@ -59,7 +59,10 @@ the start of a session, especially after a context reset.
 - Compute $/1M-tokens cost model from existing `results/*.json` (no GPU/pod
   needed — purely retrospective): `python3 benchmarks/cost_model.py`
   (env: `--results-dir`, `--hourly-rate`, defaults to `results/` and $0.27/hr)
-- Generate report: `TBD` (Phase 4)
+- Generate report charts (no GPU/pod needed — purely retrospective against
+  `results/*.json` + `*.gpu.csv`): `pip install -r reports/requirements.txt`
+  then `python3 reports/generate_charts.py` (writes PNGs to
+  `reports/images/`); see `reports/README.md` for the full writeup
 
 ## Environment / GPU Details
 

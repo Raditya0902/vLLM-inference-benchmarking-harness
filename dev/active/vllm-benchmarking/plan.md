@@ -1,7 +1,6 @@
 # vLLM Benchmarking Harness — Build Plan
 
-Status: Phase 0, Phase 1, Phase 2, and Phase 3 complete (2026-07-02).
-Phase 4 (Report) is next.
+Status: All phases (0-4) complete (2026-07-02).
 
 ## Phase 0 — Deploy ✅ done
 
@@ -68,11 +67,18 @@ model, purely retrospective against Phase 1/2's existing `results/*.json`
 (no re-run needed). Full details, exact metric names, and cost numbers in
 `context.md`.
 
-## Phase 4 — Report
+## Phase 4 — Report ✅ done
 
-- Compile findings: throughput/latency/memory/cost tables and charts across
-  all configurations.
-- Write up as a portfolio piece targeting AI infrastructure roles.
+Built entirely retrospectively from Phase 1/2's `results/*.json`/`*.gpu.csv`
+and Phase 3's `benchmarks/cost_model.py` — no pod needed.
+`reports/generate_charts.py` produces 4 charts (throughput vs. concurrency,
+TTFT vs. concurrency, cost per 1M tokens, memory tradeoff) into
+`reports/images/`; `reports/README.md` is the portfolio writeup (problem
+statement, methodology, results, 4 headline findings including the AWQ
+kernel bug story, and a limitations section); root `README.md` links into
+it as the GitHub landing page. One assumption from the Phase 4 kickoff
+("fp16 wins on TTFT") was checked against the actual data and didn't hold
+— see `context.md` for what the data actually shows instead.
 
 ## Explicitly out of scope for now
 

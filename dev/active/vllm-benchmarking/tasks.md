@@ -102,5 +102,18 @@ sync with `plan.md`).
 
 ## Phase 4 — Report
 
-- [ ] Compile results tables/charts across all configurations
-- [ ] Write portfolio report
+- [x] Compile results tables/charts across all configurations — done
+      2026-07-02, `reports/generate_charts.py` (throughput vs. concurrency,
+      TTFT vs. concurrency, cost per 1M tokens, memory tradeoff — 4 PNGs in
+      `reports/images/`), purely retrospective against `results/*.json` +
+      `*.gpu.csv`, no pod needed
+- [x] Write portfolio report — done 2026-07-02, `reports/README.md`
+      (problem statement, methodology, results tables/charts, 4 headline
+      findings including the AWQ kernel bug story, limitations section);
+      root `README.md` added as the GitHub landing page linking into it.
+      Checked the "fp16 wins on TTFT" assumption from the kickoff prompt
+      against the actual data before writing it in — it doesn't hold
+      (AWQ has lower TTFT than fp16 at every concurrency level in the
+      corrected data); reported the real finding instead (GPTQ, not fp16,
+      is the config that degrades on TTFT at high concurrency) — see
+      context.md for the full check.

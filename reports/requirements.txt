@@ -1,0 +1,3 @@
+# Report generation (reports/generate_charts.py) — local-only, not needed
+# on the GPU pod. Install with: pip install -r reports/requirements.txt
+matplotlib

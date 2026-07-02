@@ -401,6 +401,33 @@ things stand and why.
   (concurrency=8, 300 prompts, fp16 only) was solely to produce live
   traffic for verifying the dashboard renders correctly, not a formal
   benchmark run, and its output was not saved to `results/`.
+- **2026-07-02**: Phase 4 (Report) built entirely retrospectively from
+  `results/*.json` + `*.gpu.csv` (Phase 1/2) and `benchmarks/cost_model.py`
+  (Phase 3) — no pod needed, matching the plan. Added
+  `reports/generate_charts.py` (4 PNGs: throughput vs. concurrency, TTFT
+  vs. concurrency, cost per 1M tokens, memory tradeoff — all log-scale
+  where the value range spans orders of magnitude, e.g. baseline TTFT vs.
+  vLLM TTFT) and `reports/README.md` as the portfolio writeup, plus a root
+  `README.md` as the GitHub landing page. Used the dataviz skill's
+  validated categorical palette (blue/aqua/yellow/green, in that fixed
+  order for fp16/AWQ/GPTQ/baseline across every chart) rather than
+  matplotlib defaults; ran the palette validator
+  (`node scripts/validate_palette.js`) before generating anything — passed
+  with a WARN on two slots' surface contrast, mitigated by the direct
+  value labels already on every bar/line-end.
+- **2026-07-02**: The Phase 4 kickoff prompt asserted "fp16 still wins on
+  TTFT" as a reason not to oversell AWQ. Checked this against the actual
+  corrected data (mean/median/p99 TTFT, all 5 concurrency levels) before
+  writing the report — **it doesn't hold**: AWQ has lower TTFT than fp16
+  at every single concurrency level (e.g. median TTFT at c=32: AWQ 24.3ms
+  vs. fp16 33.8ms; at c=1: AWQ 19.0ms vs. fp16 22.9ms). This was very
+  likely a holdover from the *original, pre-`awq_marlin`-fix* AWQ numbers
+  (79.2ms TTFT at c=32), which genuinely were worse than fp16's, before
+  the Phase 1 kernel bug fix. Reported the real finding in
+  `reports/README.md` instead: GPTQ, not fp16, is the config whose median
+  TTFT degrades worst as concurrency rises (32.7ms at c=1 → 58.1ms at
+  c=32, ending up worse than fp16 at c=32) — that's the genuine "don't
+  treat one config as unconditionally best" caveat the data supports.
 
 ## Architecture Notes
 
