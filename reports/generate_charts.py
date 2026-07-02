@@ -149,6 +149,50 @@ def plot_cost_per_1m_tokens(results: dict, out_dir: Path) -> None:
     plt.close(fig)
 
 
+BATCHING_CONCURRENCY_LEVELS = [8, 16, 32]
+BATCHING_MODES = [
+    ("awq-continuous", "AWQ, continuous batching (default)", "#1baf7a"),
+    ("awq-static", "AWQ, static-like (max-num-seqs capped)", "#eda100"),
+]
+
+
+def load_batching_comparison(results_dir: Path) -> dict:
+    data = {name: {} for name, _, _ in BATCHING_MODES}
+    for name in data:
+        for c in BATCHING_CONCURRENCY_LEVELS:
+            path = results_dir / f"{name}-c{c}.json"
+            if path.exists():
+                data[name][c] = json.loads(path.read_text())
+    return data
+
+
+def plot_batching_comparison(results_dir: Path, out_dir: Path) -> bool:
+    """Phase 1 addendum chart: continuous vs. static-like batching, AWQ
+    only. Returns False (no-op) if the addendum sweep hasn't been run yet,
+    since this chart is optional relative to the core Phase 1-4 set."""
+    data = load_batching_comparison(results_dir)
+    if not any(data[name] for name, _, _ in BATCHING_MODES):
+        return False
+
+    fig, ax = plt.subplots(figsize=(7, 4.5), facecolor=SURFACE)
+    for name, label, color in BATCHING_MODES:
+        xs = [c for c in BATCHING_CONCURRENCY_LEVELS if c in data[name]]
+        ys = [data[name][c]["output_throughput"] for c in xs]
+        ax.plot(xs, ys, color=color, linewidth=2, marker="o", markersize=8, label=label)
+    ax.set_xscale("log", base=2)
+    ax.set_xticks(BATCHING_CONCURRENCY_LEVELS)
+    ax.set_xticklabels([str(c) for c in BATCHING_CONCURRENCY_LEVELS])
+    ax.set_xlabel("Max concurrency")
+    ax.set_ylabel("Output tokens/sec")
+    ax.set_title("Continuous vs. Static-like Batching (AWQ)")
+    style_axes(ax)
+    ax.legend(frameon=False, labelcolor=INK_SECONDARY, fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out_dir / "batching_comparison.png", dpi=150)
+    plt.close(fig)
+    return True
+
+
 def plot_memory_tradeoff(peaks: dict, out_dir: Path) -> None:
     concurrency = 32
     fig, ax = plt.subplots(figsize=(6, 4.5), facecolor=SURFACE)
@@ -193,8 +237,14 @@ def main() -> None:
     plot_ttft_vs_concurrency(results, args.out_dir)
     plot_cost_per_1m_tokens(results, args.out_dir)
     plot_memory_tradeoff(peaks, args.out_dir)
+    batching_chart_written = plot_batching_comparison(args.results_dir, args.out_dir)
 
     print(f"Charts written to {args.out_dir}")
+    if not batching_chart_written:
+        print(
+            "(batching_comparison.png skipped — run "
+            "benchmarks/run_batching_comparison.sh first)"
+        )
 
 
 if __name__ == "__main__":

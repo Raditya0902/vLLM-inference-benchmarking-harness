@@ -125,6 +125,45 @@ is a real tradeoff, not a vLLM weakness: `gpu_memory_utilization=0.9`
 (vLLM's default) trades memory headroom for the ability to serve many
 concurrent requests without re-allocating KV cache mid-run.
 
+### Continuous vs. static batching (AWQ, addendum)
+
+![Continuous vs. static-like batching](images/batching_comparison.png)
+
+vLLM 0.8.5 has no flag to disable continuous batching outright — its
+scheduler (`vllm/core/scheduler.py`) admits a waiting request into a freed
+slot on every decode step by design; there is no "wait for the whole batch
+to drain" mode (confirmed by reading the pinned tag's source, not assumed).
+Passing `--enable-chunked-prefill false`, the other candidate flag, turned
+out not to work either — vLLM 0.8.5's V1 engine (the default here)
+unconditionally re-enables it in `EngineArgs._set_default_args_v1`, and the
+server's own startup log confirms it: `chunked_prefill_enabled=True` even
+when `--no-enable-chunked-prefill` (the correct CLI syntax, an
+argparse boolean flag rather than a `true`/`false`-valued option) is passed.
+So the "static" configuration below is `--max-num-seqs <concurrency>` alone
+— capping the running batch to exactly the concurrency under test, the
+closest configurable approximation available, not literal static batching.
+
+| concurrency | continuous (tok/s) | static-like (tok/s) | continuous median TTFT (ms) | static-like median TTFT (ms) |
+|---|---|---|---|---|
+| 8  | 995.9  | 985.1  | 41.7 | 42.0 |
+| 16 | 1804.8 | 1536.2 | 30.4 | 57.4 |
+| 32 | 2275.3 | 1835.8 | 43.4 | 89.3 |
+
+At concurrency=8 the two are nearly identical (default `max_num_seqs` is
+256, so it wasn't constraining the running batch any tighter than 8 anyway
+— this is the expected null result, not noise). As concurrency rises, the
+gap opens: static-like throughput trails continuous by **~15% at
+concurrency=16 and ~19% at concurrency=32**, and its median TTFT nearly
+doubles (42.0ms → 89.3ms) while continuous stays roughly flat (41.7ms →
+43.4ms). Since chunked prefill was confirmed still active in both configs,
+`max_num_seqs` alone is producing this gap — most likely by shrinking the
+range of batch sizes vLLM captures CUDA graphs and sizes its scheduling
+budget for at server startup, not by changing request-admission policy
+(which, per the source, doesn't change either way). This wasn't isolated
+further — a genuine limitation of approximating "static batching" with
+vLLM's own knobs rather than a separate serving system built to actually
+process fixed batches to completion.
+
 ## Headline Findings
 
 **1. A config bug, not a quantization result, initially made AWQ look like
@@ -210,3 +249,8 @@ pip install -r reports/requirements.txt
 python3 benchmarks/cost_model.py          # cost table (stdout)
 python3 reports/generate_charts.py        # writes reports/images/*.png
 ```
+
+The continuous-vs-static-batching addendum needs a rented GPU to regenerate
+(`benchmarks/run_batching_comparison.sh`, AWQ only, concurrency 8/16/32) —
+`reports/generate_charts.py` skips `batching_comparison.png` automatically
+if those result files aren't present.

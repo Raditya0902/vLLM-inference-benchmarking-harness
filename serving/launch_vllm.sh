@@ -40,6 +40,13 @@ fi
 if [[ -n "$DTYPE" ]]; then
   ARGS+=(--dtype "$DTYPE")
 fi
+# Extra raw vllm serve flags (e.g. "--max-num-seqs 8 --enable-chunked-prefill
+# false" for the Phase 1 batching-mode addendum) — unset by default, doesn't
+# affect the standard fp16/AWQ/GPTQ matrix.
+if [[ -n "${EXTRA_ARGS:-}" ]]; then
+  read -ra EXTRA_ARGS_ARR <<< "$EXTRA_ARGS"
+  ARGS+=("${EXTRA_ARGS_ARR[@]}")
+fi
 
 # exec replaces this script's process with vllm serve so callers that
 # background this script and capture `$!` can kill the actual server
